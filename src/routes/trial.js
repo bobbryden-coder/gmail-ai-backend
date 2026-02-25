@@ -46,7 +46,7 @@ router.get('/status', authenticateToken, async (req, res) => {
     const isLimitedUser = !hasFullAccess;
 
     // For limited users, get today's usage count
-    let dailyUsage = { used: 0, limit: 2, remaining: 2 };
+    let dailyUsage = { used: 0, limit: 5, remaining: 5 };
     
     if (isLimitedUser) {
       const today = new Date();
@@ -61,8 +61,8 @@ router.get('/status', authenticateToken, async (req, res) => {
       
       dailyUsage = {
         used: summariesUsedToday,
-        limit: 2,
-        remaining: Math.max(0, 2 - summariesUsedToday)
+        limit: 5,
+        remaining: Math.max(0, 5 - summariesUsedToday)
       };
     }
 
@@ -95,7 +95,7 @@ router.get('/status', authenticateToken, async (req, res) => {
       has_subscription: !!user.stripeSubscriptionId,
       
       // Usage info (for limited users)
-      daily_limit: isLimitedUser ? 2 : (hasFullAccess ? 100 : 2),
+      daily_limit: isLimitedUser ? 5 : (hasFullAccess ? 100 : 5),
       summaries_used_today: dailyUsage.used,
       summaries_remaining: dailyUsage.remaining,
       usage_message: isLimitedUser 
@@ -114,8 +114,8 @@ router.get('/status', authenticateToken, async (req, res) => {
         upgrade_benefits: [
           'Unlimited AI summaries',
           'Unlimited compose & reply',
-          'Unread email summary',
-          'Auto-labeling',
+          'Advanced context options',
+          'Custom writing styles',
           'Priority support'
         ],
         upgrade_url: process.env.UPGRADE_URL || 'https://gmail-ai-backend.vercel.app/pricing'
