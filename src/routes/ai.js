@@ -16,7 +16,7 @@ const aiRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
-// Usage checking middleware - handles trial, freemium (2/day), and paid users
+// Usage checking middleware - handles trial, freemium (5/day), and paid users
 const checkUsageLimit = async (req, res, next) => {
   try {
     const user = req.user;
@@ -37,7 +37,7 @@ const checkUsageLimit = async (req, res, next) => {
     const isActive = currentUser.subscriptionStatus === 'active';
     const isFreemium = currentUser.subscriptionStatus === 'freemium';
     const hasFullAccess = isTrialing || isActive || currentUser.isPremium;
-    const isLimitedUser = !hasFullAccess; // Free/pending users share the 2/day limit
+    const isLimitedUser = !hasFullAccess; // Free/pending users share the 5/day limit
 
     console.log('📊 Usage check:', {
       userId: user.id,
@@ -49,9 +49,9 @@ const checkUsageLimit = async (req, res, next) => {
       hasFullAccess
     });
 
-    // FREE USERS (freemium/pending): Check 2 summaries per day limit using SummaryLog
+    // FREE USERS (freemium/pending): Check 5 summaries per day limit using SummaryLog
     if (isLimitedUser) {
-      const FREEMIUM_DAILY_LIMIT = 2;
+      const FREEMIUM_DAILY_LIMIT = 5;
       const dailyUsage = await getDailySummaryUsage(currentUser.id, FREEMIUM_DAILY_LIMIT);
 
       console.log(`📊 Free user ${currentUser.email}: ${dailyUsage.used}/${FREEMIUM_DAILY_LIMIT} summaries used today`);
@@ -59,7 +59,7 @@ const checkUsageLimit = async (req, res, next) => {
       if (dailyUsage.used >= FREEMIUM_DAILY_LIMIT) {
         return res.status(429).json({
           error: 'Daily limit reached',
-          message: 'Free users get 2 AI requests per day. Upgrade to Pro for unlimited access!',
+          message: 'Free users get 5 AI requests per day. Upgrade to Pro for unlimited access!',
           type: 'freemium_daily_limit',
           daily_limit_reached: true,
           summaries_used_today: dailyUsage.used,
@@ -73,8 +73,8 @@ const checkUsageLimit = async (req, res, next) => {
           benefits: [
             '✅ Unlimited AI summaries',
             '✅ Unlimited compose & reply',
-            '✅ Unread email summary',
-            '✅ Auto-labeling'
+            '✅ Advanced context options',
+            '✅ Custom writing styles'
           ]
         });
       }
@@ -184,7 +184,7 @@ async function logSummaryUsage(userId, type = 'ai_request') {
 }
 
 // Helper to get today's usage count for limited users
-async function getDailySummaryUsage(userId, limit = 2) {
+async function getDailySummaryUsage(userId, limit = 5) {
   const today = new Date();
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const used = await prisma.summaryLog.count({
@@ -326,8 +326,8 @@ router.post('/generate', authenticateToken, aiRateLimit, checkUsageLimit, async 
       usage: {
         dailyUsed: updatedUser.dailyUsage,
         monthlyUsed: updatedUser.monthlyUsage,
-        dailyLimit: hasFullAccess ? 100 : 2,
-        monthlyLimit: hasFullAccess ? 3000 : 60,
+        dailyLimit: hasFullAccess ? 100 : 5,
+        monthlyLimit: hasFullAccess ? 3000 : 150,
         subscriptionStatus: req.user.subscriptionStatus,
         // For limited users, include remaining count
         ...(req.freemiumUsage ? {
@@ -353,7 +353,7 @@ router.get('/usage', authenticateToken, async (req, res) => {
   res.json({
     dailyUsage: user.dailyUsage,
     monthlyUsage: user.monthlyUsage,
-    dailyLimit: user.isPremium ? 100 : 10,
+    dailyLimit: user.isPremium ? 100 : 5,
     isPremium: user.isPremium
   });
 });
@@ -384,14 +384,14 @@ router.post('/summarize', authenticateToken, checkUsageLimit, async (req, res) =
       req.user.isPremium;
 
     if (!hasFullAccess) {
-      const dailyUsage = await getDailySummaryUsage(req.user.id, 2);
-      if (dailyUsage.used >= 2) {
+      const dailyUsage = await getDailySummaryUsage(req.user.id, 5);
+      if (dailyUsage.used >= 5) {
         return res.status(429).json({
           success: false,
           daily_limit_reached: true,
           summaries_used_today: dailyUsage.used,
           summaries_remaining: 0,
-          daily_limit: 2,
+          daily_limit: 5,
           error: 'Daily limit reached. Upgrade to Pro for unlimited access.'
         });
       }
@@ -444,7 +444,7 @@ router.post('/summarize', authenticateToken, checkUsageLimit, async (req, res) =
     }
 
     // Determine remaining usage for response (always include counts)
-    const usageCounts = await getDailySummaryUsage(req.user.id, 2);
+    const usageCounts = await getDailySummaryUsage(req.user.id, 5);
     console.log('✅ [SUMMARY] Response counts:', {
       used: usageCounts.used,
       remaining: usageCounts.remaining,
