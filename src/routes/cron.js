@@ -91,41 +91,71 @@ router.post('/check-trial-expiry', verifyCronSecret, async (req, res) => {
   }
 });
 
-// GET /api/cron/check-trial-expiry - For testing (still requires secret)
+// GET /api/cron/check-trial-expiry - Called by Vercel Cron daily
 router.get('/check-trial-expiry', verifyCronSecret, async (req, res) => {
   try {
+    console.log('🕐 Starting trial expiry check (freemium conversion)...');
+
     const now = new Date();
-    
-    // Just return count of expired trials (dry run)
+
+    // Find all users with expired trials who are still in trialing status
     const expiredTrialUsers = await prisma.user.findMany({
       where: {
-        trialActive: true,
+        OR: [
+          { trialActive: true },
+          { subscriptionStatus: 'trialing' }
+        ],
         trialEndDate: {
           lte: now
         },
-        stripeSubscriptionId: null
-      },
-      select: {
-        id: true,
-        email: true,
-        trialEndDate: true
+        // Don't touch users who already have active paid subscriptions
+        subscriptionStatus: {
+          notIn: ['active', 'freemium']
+        }
       }
     });
-    
+
+    console.log(`Found ${expiredTrialUsers.length} users with expired trials to convert to freemium`);
+
+    let converted = 0;
+    let errors = [];
+
+    for (const user of expiredTrialUsers) {
+      try {
+        console.log(`Converting user ${user.id} (${user.email}) to freemium`);
+
+        // Convert to freemium - DO NOT create Stripe subscription or charge
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            trialActive: false,
+            isPremium: false, // No longer premium - now freemium with limits
+            subscriptionStatus: 'freemium',
+          }
+        });
+
+        console.log(`✅ User ${user.email} converted to freemium`);
+        converted++;
+
+      } catch (userError) {
+        console.error(`❌ Error converting user ${user.id}:`, userError.message);
+        errors.push({ userId: user.id, email: user.email, error: userError.message });
+      }
+    }
+
+    console.log(`🏁 Trial expiry check complete. Converted to freemium: ${converted}, Errors: ${errors.length}`);
+
     res.json({
       success: true,
-      message: 'Dry run - no changes made',
-      expiredTrialsCount: expiredTrialUsers.length,
-      expiredTrials: expiredTrialUsers.map(u => ({
-        id: u.id,
-        email: u.email,
-        trialEndDate: u.trialEndDate
-      }))
+      message: `Converted ${converted} users to freemium`,
+      converted: converted,
+      total: expiredTrialUsers.length,
+      errors: errors.length > 0 ? errors : undefined
     });
-    
+
   } catch (error) {
-    console.error('Cron dry run error:', error);
-    res.status(500).json({ error: 'Failed to check trial expiries' });
+    console.error('❌ Trial expiry cron error:', error);
+    res.status(500).json({ error: 'Failed to process trial expiries' });
   }
 });
 

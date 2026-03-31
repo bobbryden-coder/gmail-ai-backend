@@ -1,6 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const nodemailer = require('nodemailer');
 const { PrismaClient } = require('@prisma/client');
 const rateLimit = require('express-rate-limit');
 const { verifyGoogleToken } = require('../services/google-auth');
@@ -11,6 +12,49 @@ const prisma = new PrismaClient();
 
 // Cutoff date for card-on-file requirement (users created before this are grandfathered)
 const CARD_REQUIRED_CUTOFF = new Date('2025-01-21T00:00:00Z');
+
+// Send welcome email to new users
+async function sendWelcomeEmail(email, name) {
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT, 10),
+      secure: parseInt(process.env.SMTP_PORT, 10) === 465,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.SMTP_USER,
+      to: email,
+      subject: 'Your first Linkwell email in 60 seconds',
+      text: `Hi ${name},
+
+Thanks for installing Linkwell.
+
+Here's how to get your first personalised outreach email in 60 seconds:
+
+1. Open any LinkedIn profile
+2. Click the Linkwell icon in your Chrome toolbar
+3. Choose your reason for reaching out
+4. Hit Generate
+
+Gmail opens with a ready-to-send draft — no copy-pasting, no templates.
+
+If anything isn't working, just reply to this email.
+
+Bob
+Founder, Linkwell
+getlinkwell.org`,
+    });
+
+    console.log(`📧 Welcome email sent to ${email}`);
+  } catch (error) {
+    console.error(`❌ Failed to send welcome email to ${email}:`, error.message);
+  }
+}
 
 // Rate limiting for auth endpoints
 const authLimiter = rateLimit({
@@ -338,6 +382,9 @@ router.post('/google', async (req, res) => {
         }
       });
       console.log(`✅ New user registered via Google: ${user.email} (ID: ${user.id}) - 30-day trial started`);
+
+      // Send welcome email (fire and forget - don't block auth response)
+      sendWelcomeEmail(user.email, user.name);
     }
 
     // Generate JWT token

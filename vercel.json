@@ -11,5 +11,11 @@
     "api/index.js": {
       "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/check-trial-expiry?secret=595604000e497d76f2cf5c3027535620",
+      "schedule": "0 0 * * *"
+    }
+  ]
 }
