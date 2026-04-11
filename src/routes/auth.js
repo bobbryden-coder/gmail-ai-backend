@@ -384,11 +384,12 @@ router.post('/google', async (req, res) => {
       console.log(`✅ New user registered via Google: ${user.email} (ID: ${user.id}) - 30-day trial started`);
 
       // Send welcome email (fire and forget - don't block auth response)
-      sendWelcomeEmail(user.email, user.name).then(() => {
+      try {
+        await sendWelcomeEmail(user.email, user.name);
         console.log('✅ Welcome email sent to:', user.email);
-      }).catch(err => {
+      } catch (err) {
         console.error('❌ Welcome email failed:', err.message);
-      });
+      }
     }
 
     // Generate JWT token
