@@ -21,7 +21,7 @@ const passwordResetRoutes = require('./routes/password-reset');
 const trialRoutes = require('./routes/trial');
 const adminRoutes = require('./routes/admin');
 const StripeService = require('./services/stripe');
-// Cron routes removed - Stripe handles trial expiry automatically
+const cronRoutes = require('./routes/cron');
 const openaiService = require('./services/openai');
 
 const app = express();
@@ -126,6 +126,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/stripe', stripeRoutes);
 app.use('/api/trial', trialRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/cron', cronRoutes);
 
 // Summarize email endpoint (direct route for /api/summarize)
 app.post('/api/summarize', async (req, res) => {
