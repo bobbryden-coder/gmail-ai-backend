@@ -37,6 +37,9 @@ model User {
   subscriptionStatus  String    @default("none")  // none, trialing, freemium, active, canceled
   planType            String?
   
+  // Email tracking
+  nudgeEmailSent      Boolean   @default(false)
+
   // Password reset
   resetPasswordToken  String?
   resetPasswordExpiry DateTime?

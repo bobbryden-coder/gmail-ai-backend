@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/check-trial-expiry?secret=595604000e497d76f2cf5c3027535620",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/send-nudge-emails?secret=595604000e497d76f2cf5c3027535620",
+      "schedule": "0 9 * * *"
     }
   ]
 }
