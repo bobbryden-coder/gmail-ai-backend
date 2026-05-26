@@ -6,6 +6,8 @@ const router = express.Router();
 
 router.post('/score', authenticateToken, async (req, res) => {
   try {
+    console.log('[recruiter/score] REQUEST:', JSON.stringify(req.body, null, 2));
+
     const { criteria, candidates } = req.body;
 
     if (!criteria || typeof criteria !== 'string') {
@@ -44,13 +46,16 @@ router.post('/score', authenticateToken, async (req, res) => {
     });
 
     const rawText = response.choices[0].message.content;
+    console.log('[recruiter/score] OPENAI RAW:', JSON.stringify(rawText, null, 2));
+
     let scores;
     try {
       const parsed = JSON.parse(rawText);
+      console.log('[recruiter/score] PARSED:', JSON.stringify(parsed, null, 2));
       scores = parsed.scores || parsed;
     } catch (parseErr) {
-      console.error('Failed to parse scoring response:', parseErr.message);
-      console.error('Raw response:', rawText);
+      console.error('[recruiter/score] PARSE ERROR:', parseErr.message);
+      console.error('[recruiter/score] RAW TEXT:', rawText);
       return res.status(500).json({ error: 'Failed to parse AI scoring response' });
     }
 
@@ -70,10 +75,12 @@ router.post('/score', authenticateToken, async (req, res) => {
       };
     });
 
-    res.json({ success: true, candidates: merged });
+    const result = { success: true, candidates: merged };
+    console.log('[recruiter/score] RESPONSE:', JSON.stringify(result, null, 2));
+    res.json(result);
 
   } catch (error) {
-    console.error('Recruiter score error:', error);
+    console.error('[recruiter/score] ERROR:', error.stack || error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
