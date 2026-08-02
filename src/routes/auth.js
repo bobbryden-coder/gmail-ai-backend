@@ -29,25 +29,26 @@ async function sendWelcomeEmail(email, name) {
     await transporter.sendMail({
       from: process.env.SMTP_USER,
       to: email,
-      subject: 'Your first Linkwell email in 60 seconds',
+      subject: 'Your first Linkwell outreach in 60 seconds',
       text: `Hi ${name},
 
 Thanks for installing Linkwell.
 
-Here's how to get your first personalised outreach email in 60 seconds:
+Here's how to send your first personalized outreach in 60 seconds:
 
 1. Open any LinkedIn profile
 2. Click the Linkwell icon in your Chrome toolbar
-3. Choose your reason for reaching out
-4. Hit Generate
+3. Pick your outreach mode (Recruiter, Expert sourcing, Job seeker, or Networker)
+4. Choose a destination — LinkedIn message, InMail, Gmail, or Outlook
+5. Hit Generate
 
-Gmail opens with a ready-to-send draft — no copy-pasting, no templates.
+You can also attach a job posting PDF for recruiter outreach, and draft LinkedIn connection notes, direct messages, or InMail — all from the same popup.
 
 If anything isn't working, just reply to this email.
 
 Bob
 Founder, Linkwell
-getlinkwell.org`,
+linkwellhq.com`,
     });
 
     console.log(`📧 Welcome email sent to ${email}`);
