@@ -46,6 +46,8 @@ model User {
   
   // Relations
   summaryLogs         SummaryLog[]
+  jobPostings         JobPosting[]
+  candidates          Candidate[]
 
   @@map("users")
 }
@@ -57,7 +59,71 @@ model SummaryLog {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   type      String   // "email_summary", "compose", "reply", etc.
   createdAt DateTime @default(now())
-  
+
   @@index([userId, createdAt])
   @@map("summary_logs")
+}
+
+// ---- Recruiter Portal models ----
+
+model JobPosting {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  company     String
+  description String      @db.Text
+  status      String      @default("open") // open, filled, closed
+  createdAt   DateTime    @default(now())
+  candidates  Candidate[]
+
+  @@index([userId])
+  @@map("job_postings")
+}
+
+model Candidate {
+  id              String        @id @default(cuid())
+  jobPostingId    String
+  jobPosting      JobPosting    @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  linkedinUrl     String
+  headline        String?
+  summary         String?       @db.Text
+  status          String        @default("contacted") // contacted, replied, booked, rejected, no_response
+  lastContactedAt DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  notes           CaseNote[]
+  outreachLogs    OutreachLog[]
+
+  @@unique([userId, jobPostingId, linkedinUrl])
+  @@index([jobPostingId])
+  @@index([userId])
+  @@map("candidates")
+}
+
+model CaseNote {
+  id          String    @id @default(cuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  noteText    String    @db.Text
+  createdAt   DateTime  @default(now())
+
+  @@index([candidateId])
+  @@map("case_notes")
+}
+
+model OutreachLog {
+  id          String    @id @default(cuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  channel     String    // linkedin_note, dm, inmail, email
+  messageText String    @db.Text
+  direction   String    // sent, received
+  createdAt   DateTime  @default(now())
+
+  @@index([candidateId, createdAt])
+  @@map("outreach_logs")
 }

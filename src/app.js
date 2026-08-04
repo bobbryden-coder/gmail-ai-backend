@@ -23,6 +23,7 @@ const adminRoutes = require('./routes/admin');
 const recruiterRoutes = require('./routes/recruiter');
 const StripeService = require('./services/stripe');
 const cronRoutes = require('./routes/cron');
+const portalRoutes = require('./routes/portal');
 const openaiService = require('./services/openai');
 
 const app = express();
@@ -129,6 +130,7 @@ app.use('/api/trial', trialRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/cron', cronRoutes);
 app.use('/api/recruiter', recruiterRoutes);
+app.use('/api/portal', portalRoutes);
 
 // Summarize email endpoint (direct route for /api/summarize)
 app.post('/api/summarize', async (req, res) => {
