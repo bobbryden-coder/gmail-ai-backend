@@ -73,6 +73,71 @@ router.post('/job-postings', authenticateToken, async (req, res) => {
   }
 });
 
+// Create job posting from raw text (LLM extraction)
+router.post('/job-postings/from-text', authenticateToken, async (req, res) => {
+  try {
+    const { rawText, title: userTitle, company: userCompany } = req.body;
+    if (!rawText || rawText.trim().length < 20) {
+      return res.status(400).json({ error: 'rawText is required (at least 20 characters)' });
+    }
+
+    // Extract title and company from raw text using LLM
+    const extractPrompt =
+      'Extract the job title and company name from this job posting text.\n' +
+      'RULES:\n' +
+      '- Extract ONLY what is explicitly stated in the text.\n' +
+      '- If the company name is not clearly stated, return an empty string for company.\n' +
+      '- If the job title is not clearly stated, return an empty string for title.\n' +
+      '- Do NOT guess or infer. If uncertain, return empty.\n' +
+      '- For description, return the full cleaned text of the posting (remove obvious header/footer noise but keep the substance).\n\n' +
+      '--- JOB POSTING TEXT ---\n' +
+      rawText.substring(0, 3000) + '\n\n' +
+      'Return ONLY valid JSON, no markdown:\n' +
+      '{"title": "...", "company": "...", "description": "..."}';
+
+    const result = await openaiService.generateRaw(extractPrompt);
+
+    let extracted = { title: '', company: '', description: rawText.trim() };
+    if (result.success) {
+      try {
+        let clean = result.response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const parsed = JSON.parse(clean);
+        extracted.title = (parsed.title || '').trim();
+        extracted.company = (parsed.company || '').trim();
+        if (parsed.description && parsed.description.trim().length > 50) {
+          extracted.description = parsed.description.trim();
+        }
+      } catch (parseErr) {
+        console.error('Failed to parse extraction response:', parseErr.message);
+      }
+    }
+
+    // User-provided values override extraction
+    const finalTitle = (userTitle && userTitle.trim()) ? userTitle.trim() : extracted.title;
+    const finalCompany = (userCompany && userCompany.trim()) ? userCompany.trim() : extracted.company;
+    const finalDescription = extracted.description;
+
+    const posting = await prisma.jobPosting.create({
+      data: {
+        userId: req.user.id,
+        title: finalTitle || 'Untitled',
+        company: finalCompany || '',
+        description: finalDescription,
+        status: 'open'
+      }
+    });
+
+    res.status(201).json({
+      success: true,
+      posting,
+      extracted: { title: extracted.title, company: extracted.company }
+    });
+  } catch (error) {
+    console.error('Create posting from text error:', error);
+    res.status(500).json({ error: 'Failed to create posting from text' });
+  }
+});
+
 // Get single job posting
 router.get('/job-postings/:id', authenticateToken, async (req, res) => {
   try {
