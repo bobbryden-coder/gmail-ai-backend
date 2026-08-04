@@ -497,14 +497,26 @@ router.post('/intake/generation', authenticateToken, async (req, res) => {
       });
     }
 
-    // Only log outreach if messageText differs from most recent sent entry (avoid duplicates)
+    // Time-window dedupe: if the most recent "sent" entry is < 24h old, UPDATE it
+    // (same-day regenerate-and-copy = revision of one attempt). If older or none, APPEND.
     const lastSent = await prisma.outreachLog.findFirst({
       where: { candidateId: candidate.id, direction: 'sent' },
       orderBy: { createdAt: 'desc' }
     });
 
     let log = null;
-    if (!lastSent || lastSent.messageText !== messageText) {
+    let updated = false;
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+    if (lastSent && (Date.now() - new Date(lastSent.createdAt).getTime()) < TWENTY_FOUR_HOURS) {
+      // Same-day revision: update the existing entry
+      log = await prisma.outreachLog.update({
+        where: { id: lastSent.id },
+        data: { messageText: messageText, channel: ch, createdAt: new Date() }
+      });
+      updated = true;
+    } else {
+      // New attempt (first ever, or >24h since last): append
       log = await prisma.outreachLog.create({
         data: {
           candidateId: candidate.id,
@@ -525,7 +537,7 @@ router.post('/intake/generation', authenticateToken, async (req, res) => {
       candidateId: candidate.id,
       outreachLogId: log ? log.id : null,
       isNew: isNew,
-      duplicateMessage: !log
+      updatedExisting: updated
     });
   } catch (error) {
     console.error('Intake generation error:', error);
