@@ -432,12 +432,17 @@ router.post('/candidates/:id/generate-followup', authenticateToken, async (req, 
       channel: lastReceived ? lastReceived.channel : (lastSent ? lastSent.channel : 'email')
     });
 
-    const result = await openaiService.generateRaw(prompt);
-    if (!result.success) {
-      return res.status(500).json({ error: 'Failed to generate follow-up: ' + result.error });
-    }
+    const result = await openaiService.generateWithQualityGate(prompt, {
+      fallbackName: candidate.name.split(' ')[0],
+      fallbackContext: jobPosting ? `the ${jobPosting.title} role` + (jobPosting.company ? ` at ${jobPosting.company}` : '') : 'a role I mentioned'
+    });
 
-    res.json({ success: true, followUp: result.response.trim() });
+    res.json({
+      success: true,
+      followUp: result.response,
+      retried: result.retried || false,
+      fallback: result.fallback || false
+    });
   } catch (error) {
     console.error('Generate follow-up error:', error);
     res.status(500).json({ error: 'Failed to generate follow-up' });

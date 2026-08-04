@@ -718,6 +718,47 @@ Return ONLY valid JSON with no markdown:
 
     console.log('📧 [COMPOSE] Cleaned text (no embedded newlines) for response');
 
+    // Post-generation quality gate: check each tone variant
+    const toneKeys = ['professional', 'casual', 'creative'];
+    let anyFailed = false;
+    for (const key of toneKeys) {
+      if (!emails[key]) continue;
+      const check = openaiService.checkDraftQuality(emails[key]);
+      if (!check.pass) {
+        console.warn(`[QualityGate] compose/${key} failed: [${check.check}] ${check.reason}`);
+        anyFailed = true;
+      }
+    }
+
+    // If any tone failed quality, retry the whole generation once
+    if (anyFailed) {
+      console.log('[QualityGate] Retrying compose generation...');
+      const retryResult = await openaiService.generateRaw(prompt);
+      if (retryResult.success) {
+        try {
+          let retryClean = retryResult.response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          const retryEmails = JSON.parse(retryClean);
+          for (const key of toneKeys) {
+            if (retryEmails[key]) {
+              const cleaned = cleanEmailBody(retryEmails[key]);
+              const retryCheck = openaiService.checkDraftQuality(cleaned);
+              if (retryCheck.pass) {
+                emails[key] = cleaned;
+              } else {
+                console.warn(`[QualityGate] Retry compose/${key} still failed: [${retryCheck.check}] ${retryCheck.reason}`);
+                // Fallback for this tone
+                const name = to.split('@')[0] || 'there';
+                emails[key] = `Hi ${name},\n\nI wanted to reach out regarding the role described above. Would you be open to a brief conversation this week?\n\nBest regards`;
+                console.warn(`[QualityGate] Using fallback for compose/${key}`);
+              }
+            }
+          }
+        } catch (retryParseErr) {
+          console.error('[QualityGate] Retry parse failed:', retryParseErr.message);
+        }
+      }
+    }
+
     // Update user usage
     await prisma.user.update({
       where: { id: req.user.id },

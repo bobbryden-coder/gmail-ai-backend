@@ -182,10 +182,118 @@ Generate a complete email with subject line and body. Respond with JSON in this 
     return inputCost + outputCost;
   }
 
+  // ---- Post-generation quality gate ----
+
+  static BANNED_PHRASES = [
+    'extensive experience',
+    'compelling candidate',
+    'exciting opportunity',
+    'impressive background',
+    'strong candidate',
+    'invaluable',
+    'would be an asset',
+    'i was impressed by',
+    'caught my eye',
+    'stood out',
+    'i came across your profile',
+    'i admire',
+    'passionate about',
+    'thrilled',
+    'makes you an ideal',
+    'your mission',
+    'resonates',
+    "in today's landscape",
+    'your leadership in',
+    'your vision',
+  ];
+
+  checkDraftQuality(draft) {
+    if (!draft || typeof draft !== 'string') {
+      return { pass: false, check: 'empty', reason: 'Draft is empty or not a string' };
+    }
+
+    const trimmed = draft.trim();
+
+    // Check 1: Minimum length
+    if (trimmed.length < 40) {
+      return { pass: false, check: 'min_length', reason: `Draft too short (${trimmed.length} chars)` };
+    }
+
+    // Check 2: Completeness (ends with terminal punctuation)
+    // Strip common sign-off noise that models append (placeholders, signature blocks)
+    // Use [\s\S] instead of .* to match across newlines
+    let cleaned = trimmed
+      .replace(/\n*(?:Best regards|Kind regards|Warm regards|Regards|Sincerely|Best wishes|Best|Cheers|Thanks|Thank you),?\s*[\s\S]*$/i, '')
+      .replace(/\n*\[(?:Your|My)[\s\S]*$/i, '')
+      .replace(/^Subject:.*\n+/i, '')
+      .trim();
+    if (cleaned.length < 40) cleaned = trimmed; // Don't over-strip
+
+    const lastChar = cleaned.slice(-1);
+    const terminalChars = '.!?';
+    const closingThenTerminal = /[.!?]["')\]]\s*$/;
+    if (!terminalChars.includes(lastChar) && !closingThenTerminal.test(cleaned)) {
+      return { pass: false, check: 'completeness', reason: `Draft appears truncated (ends with "${cleaned.slice(-20)}")` };
+    }
+
+    // Check 3: Banned phrases
+    const lower = trimmed.toLowerCase();
+    for (const phrase of OpenAIService.BANNED_PHRASES) {
+      if (lower.includes(phrase)) {
+        return { pass: false, check: 'banned_phrase', reason: `Contains banned phrase: "${phrase}"` };
+      }
+    }
+
+    return { pass: true };
+  }
+
+  /**
+   * Generate with quality gate: runs checks, retries once on failure, falls back to safe generic.
+   * @param {string} prompt - The generation prompt
+   * @param {object} opts - Options: { fallbackName, fallbackContext, maxTokens }
+   */
+  async generateWithQualityGate(prompt, opts = {}) {
+    const maxTokens = opts.maxTokens || 1000;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await this.generateRaw(prompt, maxTokens);
+      if (!result.success) {
+        console.error(`[QualityGate] Generation failed (attempt ${attempt + 1}):`, result.error);
+        continue;
+      }
+
+      const draft = result.response.trim();
+      const check = this.checkDraftQuality(draft);
+
+      if (check.pass) {
+        if (attempt > 0) {
+          console.log('[QualityGate] Retry succeeded');
+        }
+        return { success: true, response: draft, retried: attempt > 0 };
+      }
+
+      console.warn(`[QualityGate] Check failed (attempt ${attempt + 1}): [${check.check}] ${check.reason}`);
+
+      if (attempt === 0) {
+        console.log('[QualityGate] Retrying generation...');
+      }
+    }
+
+    // Both attempts failed — fall back to safe generic message
+    const name = opts.fallbackName || 'there';
+    const context = opts.fallbackContext || '';
+    const fallback = context
+      ? `Hi ${name}, I wanted to reach out regarding ${context}. Would you have time for a brief conversation this week?`
+      : `Hi ${name}, I wanted to reach out and connect. Would you have time for a brief conversation this week?`;
+
+    console.warn('[QualityGate] Both attempts failed, using fallback. Last failure logged above.');
+    return { success: true, response: fallback, fallback: true };
+  }
+
   /**
    * Generate raw text response from a custom prompt
    */
-  async generateRaw(prompt) {
+  async generateRaw(prompt, maxTokens) {
     try {
       const apiKey = process.env.OPENAI_API_KEY?.trim();
       if (!apiKey) {
@@ -204,7 +312,7 @@ Generate a complete email with subject line and body. Respond with JSON in this 
             content: prompt
           }
         ],
-        max_tokens: 1000,
+        max_tokens: maxTokens || 1000,
         temperature: 0.7,
       });
 
