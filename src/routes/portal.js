@@ -453,17 +453,20 @@ function buildFollowUpPrompt(opts) {
   let prompt =
     'Write a follow-up message to a candidate who replied to a recruiter outreach.\n\n' +
     'RULES:\n' +
-    '- Directly address what the candidate said in their reply. If they asked questions, answer them. If they expressed interest, propose a next step.\n' +
+    '- Read the candidate\'s reply carefully. Determine whether it contains a SPECIFIC QUESTION (about compensation, location, remote policy, timeline, team size, tech stack, etc.) or is just a generic acknowledgment ("thanks, sounds interesting," "tell me more," etc.).\n' +
+    '- IF THE REPLY CONTAINS SPECIFIC QUESTIONS: Answer each question directly using ONLY facts from the job posting below. If the posting does not contain the answer, say so honestly ("I don\'t have that detail yet, but I can find out"). After answering, propose a concrete next step.\n' +
+    '- IF THE REPLY IS A GENERIC ACKNOWLEDGMENT with no specific question: Do NOT restate or re-explain the role or the candidate\'s fit. Instead, be brief (1-2 sentences) and propose a concrete next step, e.g. "Would a 15-minute call this week work?" or "Happy to set up a quick call -- what does your availability look like?"\n' +
+    '- NEVER pad the message with vague transition phrases like "I\'d be happy to discuss how X relates to Y" or re-pitch the role in different words.\n' +
     '- Use ONLY facts provided below. Do NOT invent, assume, or infer anything about the candidate or the role that is not explicitly stated.\n' +
-    '- BANNED phrases (never use): "extensive experience," "compelling candidate," "exciting opportunity," "impressive background," "strong candidate," "invaluable," "would be an asset," "I was impressed by," "passionate about," "thrilled"\n' +
-    '- Be concrete, direct, and short (3-5 sentences max). No flattery. No filler.\n' +
+    '- BANNED phrases (never use): "extensive experience," "compelling candidate," "exciting opportunity," "impressive background," "strong candidate," "invaluable," "would be an asset," "I was impressed by," "passionate about," "thrilled," "expertise in," "background in [X] management," "strong alignment," "I believe there may be," "relate to the," "explore this further"\n' +
+    '- Be concrete, direct, and short. No flattery. No filler.\n' +
     '- Do not use em dashes. Do not use emojis.\n' +
     '- Write like a real person continuing a conversation, not a template.\n\n';
 
   prompt += '--- ROLE ---\n';
   if (opts.jobTitle) prompt += 'Title: ' + opts.jobTitle + '\n';
   if (opts.jobCompany) prompt += 'Company: ' + opts.jobCompany + '\n';
-  if (opts.jobDescription) prompt += 'Description: ' + opts.jobDescription.substring(0, 500) + '\n';
+  if (opts.jobDescription) prompt += 'Description: ' + opts.jobDescription.substring(0, 1500) + '\n';
   prompt += '\n';
 
   prompt += '--- CANDIDATE ---\n';

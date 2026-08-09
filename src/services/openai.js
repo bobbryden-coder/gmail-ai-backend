@@ -205,6 +205,12 @@ Generate a complete email with subject line and body. Respond with JSON in this 
     "in today's landscape",
     'your leadership in',
     'your vision',
+    'expertise in',
+    'background in',
+    'strong alignment',
+    'i believe there may be',
+    'relate to the',
+    'explore this further',
   ];
 
   checkDraftQuality(draft) {
