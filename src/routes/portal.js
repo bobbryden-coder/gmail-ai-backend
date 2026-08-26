@@ -189,6 +189,134 @@ router.delete('/job-postings/:id', authenticateToken, async (req, res) => {
 });
 
 // ============================================================
+// EXPERT TEMPLATE (one per user — skeleton + style notes only)
+// ============================================================
+
+// Contact-info regex strip (server-side backstop)
+function stripContactInfo(text) {
+  if (!text) return text;
+  // Phone numbers (various formats)
+  text = text.replace(/(\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}/g, '{{phone}}');
+  // Email addresses
+  text = text.replace(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g, '{{email}}');
+  // Street addresses (number + street name patterns)
+  text = text.replace(/\d{1,5}\s+[A-Z][a-zA-Z]+(?:\s+(?:Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Road|Rd|Lane|Ln|Court|Ct|Way|Place|Pl|Suite|Ste|Floor|Fl))\b\.?(?:\s*#?\s*\d+)?/g, '{{address}}');
+  return text;
+}
+
+// Get expert template for the authenticated user
+router.get('/expert-template', authenticateToken, async (req, res) => {
+  try {
+    const template = await prisma.expertTemplate.findUnique({
+      where: { userId: req.user.id }
+    });
+    res.json({ success: true, template: template || null });
+  } catch (error) {
+    console.error('Get expert template error:', error);
+    res.status(500).json({ error: 'Failed to get expert template' });
+  }
+});
+
+// Create or replace expert template from raw text (LLM extraction)
+// NOTE: rawText is used only for LLM processing and is NEVER persisted.
+//       Only the extracted skeleton and styleNotes are stored.
+router.post('/expert-template', authenticateToken, async (req, res) => {
+  try {
+    const { rawText } = req.body;
+    if (!rawText || rawText.trim().length < 50) {
+      return res.status(400).json({ error: 'rawText is required (at least 50 characters)' });
+    }
+
+    // Server-side contact-info strip (backstop — client also strips before sending)
+    const sanitizedText = stripContactInfo(rawText.trim());
+
+    // LLM extraction: convert example message into skeleton + style notes
+    const extractPrompt =
+      'You are a message template analyzer. Given the example outreach message below, produce TWO sections:\n\n' +
+      'SECTION 1 — SKELETON\n' +
+      'Convert the message into a reusable structural template with placeholders. Replace:\n' +
+      '- Any specific company, client, or organization names with {{client_org}} or {{sender_org}}\n' +
+      '- Any industry, sector, or domain topic with {{client_industry}} or {{research_topic}}\n' +
+      '- Any specific technologies, products, or methodologies with {{topic_specifics}}\n' +
+      '- The recipient\'s name with {{recipient_name}}\n' +
+      '- The recipient\'s title/role with {{recipient_role}}\n' +
+      '- The recipient\'s company with {{recipient_company}}\n' +
+      '- Any specific reason this person was chosen with {{why_this_expert}}\n' +
+      '- The sender\'s name with {{sender_name}}\n' +
+      '- Any phone numbers, email addresses, or physical addresses with {{contact_details}}\n' +
+      '- Any compensation figures with {{compensation}}\n' +
+      '- Any time commitments with {{time_commitment}}\n' +
+      'Keep the sentence structure, paragraph breaks, greeting style, and sign-off exactly as they appear.\n' +
+      'Do NOT add any content that was not in the original.\n\n' +
+      'SECTION 2 — STYLE NOTES\n' +
+      'Write 3-5 bullet points describing the writing style:\n' +
+      '- Register (formal/informal/conversational)\n' +
+      '- Average sentence length (short/medium/long)\n' +
+      '- Greeting convention (e.g. "Hi FirstName," or "Dear Mr. LastName,")\n' +
+      '- Sign-off convention (e.g. "Best," or "Thanks," or just name)\n' +
+      '- Any distinctive patterns (e.g. uses questions, leads with the ask, etc.)\n\n' +
+      'Format your response exactly as:\n' +
+      '---SKELETON---\n' +
+      '[the skeleton here]\n' +
+      '---STYLE NOTES---\n' +
+      '[the bullet points here]\n\n' +
+      '--- EXAMPLE MESSAGE ---\n' + sanitizedText.substring(0, 3000);
+
+    const result = await openaiService.generateRaw(extractPrompt, 1500);
+
+    if (!result.success) {
+      return res.status(500).json({ error: 'LLM extraction failed: ' + (result.error || 'unknown') });
+    }
+
+    const responseText = result.response || '';
+
+    // Parse skeleton and style notes
+    const skeletonMatch = responseText.match(/---SKELETON---\s*([\s\S]*?)---STYLE NOTES---/);
+    const styleMatch = responseText.match(/---STYLE NOTES---\s*([\s\S]*?)$/);
+
+    if (!skeletonMatch || !styleMatch) {
+      return res.status(500).json({ error: 'Could not parse template structure from LLM response. Please try again.' });
+    }
+
+    const skeleton = skeletonMatch[1].trim();
+    const styleNotes = styleMatch[1].trim();
+
+    if (skeleton.length < 20) {
+      return res.status(500).json({ error: 'Extracted skeleton was too short. Please provide a more complete example.' });
+    }
+
+    // Upsert: one template per user. ONLY skeleton + styleNotes are persisted.
+    const template = await prisma.expertTemplate.upsert({
+      where: { userId: req.user.id },
+      update: { skeleton, styleNotes, updatedAt: new Date() },
+      create: { userId: req.user.id, skeleton, styleNotes }
+    });
+
+    res.status(201).json({ success: true, template });
+  } catch (error) {
+    console.error('Create expert template error:', error);
+    res.status(500).json({ error: 'Failed to create expert template' });
+  }
+});
+
+// Delete expert template
+router.delete('/expert-template', authenticateToken, async (req, res) => {
+  try {
+    const existing = await prisma.expertTemplate.findUnique({
+      where: { userId: req.user.id }
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'No expert template found' });
+    }
+    await prisma.expertTemplate.delete({ where: { id: existing.id } });
+    res.json({ success: true, message: 'Expert template deleted' });
+  } catch (error) {
+    console.error('Delete expert template error:', error);
+    res.status(500).json({ error: 'Failed to delete expert template' });
+  }
+});
+
+// ============================================================
 // CANDIDATES CRUD (scoped under a job posting)
 // ============================================================
 

@@ -48,6 +48,7 @@ model User {
   summaryLogs         SummaryLog[]
   jobPostings         JobPosting[]
   candidates          Candidate[]
+  expertTemplate      ExpertTemplate?
 
   @@map("users")
 }
@@ -126,4 +127,18 @@ model OutreachLog {
 
   @@index([candidateId, createdAt])
   @@map("outreach_logs")
+}
+
+// ---- Expert sourcing template ----
+// One per user. Stores only the processed skeleton + style notes, never raw text.
+model ExpertTemplate {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skeleton   String   @db.Text
+  styleNotes String   @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("expert_templates")
 }
